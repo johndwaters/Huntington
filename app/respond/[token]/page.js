@@ -120,7 +120,7 @@ export default function RespondPage() {
     }
 
     if (stage === 'already') {
-        const labels = { YES: 'Credit line pull needed', MAYBE: 'Possibly needed', NO: 'No action needed' };
+        const labels = { YES: 'Funds are low', MAYBE: 'Uncertain', NO: 'Funds are good' };
         return (
             <div className="page-center">
                 <div className="card response-card">
@@ -141,9 +141,9 @@ export default function RespondPage() {
 
     if (stage === 'done') {
         const configs = {
-            YES: { color: 'var(--brand-red)', bg: '#fdf2f2', label: 'Credit Line Pull Needed', msg: 'Your response has been recorded and the whole team has been notified that a credit line pull is needed.' },
-            MAYBE: { color: 'var(--brand-orange)', bg: '#fef9e7', label: 'Possibly Needed', msg: 'Your response has been recorded and the whole team has been notified that a credit line pull may be needed.' },
-            NO: { color: 'var(--brand-green)', bg: '#eafaf1', label: 'No Pull Needed', msg: 'Your response has been recorded and the whole team has been notified that no credit line pull is needed.' },
+            YES: { color: 'var(--brand-red)', bg: '#fdf2f2', label: 'Funds are Low', msg: 'Your response has been recorded and the whole team has been notified that funds are low.' },
+            MAYBE: { color: 'var(--brand-orange)', bg: '#fef9e7', label: 'Uncertain', msg: 'Your response has been recorded and the whole team has been notified that the status is uncertain.' },
+            NO: { color: 'var(--brand-green)', bg: '#eafaf1', label: 'Funds are Good', msg: 'Your response has been recorded and the whole team has been notified that funds are good.' },
         };
         const c = configs[result] || configs.NO;
         return (
@@ -168,7 +168,7 @@ export default function RespondPage() {
             <div className="page-center">
                 <div className="card response-card">
                     <div className="card-header dark">
-                        <h2>Monthly Bank Account Status Check</h2>
+                        <h2>Monthly Status Check</h2>
                         <p>Please select the current status</p>
                     </div>
                     <div className="card-body">
@@ -177,13 +177,13 @@ export default function RespondPage() {
                         </p>
                         <div className="response-buttons">
                             <button className="response-btn" style={{ background: 'var(--brand-green)' }} onClick={() => handleActionSelect('no')}>
-                                No — We're Good
+                                Yes — Funds Good
                             </button>
                             <button className="response-btn" style={{ background: 'var(--brand-orange)' }} onClick={() => handleActionSelect('maybe')}>
-                                Maybe — Not Sure Yet
+                                Maybe
                             </button>
                             <button className="response-btn" style={{ background: 'var(--brand-red)' }} onClick={() => handleActionSelect('yes')}>
-                                Yes — Need Credit Line Pull
+                                No — Funds are Low
                             </button>
                         </div>
                         <p className="text-center text-muted">Clicking any button will immediately notify the team.</p>

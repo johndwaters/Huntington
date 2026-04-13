@@ -1,0 +1,147 @@
+import { NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
+import {
+    initializeDatabase, getConfig, getRecipients, getActiveReminder,
+    getCurrentReminder, createReminder, createFinalReminder,
+    incrementFollowUp, logEvent
+} from '@/lib/db';
+import {
+    sendEmail, buildReminderEmailHtml, buildFinalCheckEmailHtml,
+    buildFinalCheckNotificationHtml, buildNotificationSubject
+} from '@/lib/email';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request) {
+    // Verify cron secret
+    const authHeader = request.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    try {
+        await initializeDatabase();
+        const config = await getConfig();
+        const now = new Date();
+        const results = [];
+
+        // Get current month string
+        const month = now.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: config.timezone || 'America/New_York' });
+        const dayOfMonth = parseInt(now.toLocaleString('en-US', { day: 'numeric', timeZone: config.timezone || 'America/New_York' }));
+
+        const sendDay = parseInt(config.send_day || '15');
+        const followUpAfterDays = parseInt(config.follow_up_after_days || '3');
+        const maxFollowUps = parseInt(config.max_follow_ups || '2');
+        const finalCheckDaysBefore = parseInt(config.final_check_days_before || '5');
+
+        // Calculate last day of month
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const daysLeft = lastDay - dayOfMonth;
+
+        // 1. Check if we need to send monthly reminder
+        if (dayOfMonth === sendDay) {
+            const existing = await getActiveReminder(month);
+            if (!existing) {
+                results.push(await sendMonthlyReminder(config, month));
+            } else {
+                results.push({ action: 'monthly_reminder', status: 'skipped', reason: 'already sent' });
+            }
+        }
+
+        // 2. Check follow-ups
+        const currentReminder = await getActiveReminder(month);
+        if (currentReminder && currentReminder.status === 'pending') {
+            const sentAt = new Date(currentReminder.sent_at);
+            const daysSince = Math.floor((now - sentAt) / 86400000);
+            const followUpCount = currentReminder.follow_up_count || 0;
+
+            if (followUpCount < maxFollowUps && daysSince >= followUpAfterDays * (followUpCount + 1)) {
+                results.push(await sendFollowUp(config, currentReminder, followUpCount + 1));
+            }
+        }
+
+        // 3. Check final confirmation
+        if (daysLeft === finalCheckDaysBefore) {
+            const reminder = await getActiveReminder(month);
+            if (reminder && !reminder.final_check_sent) {
+                results.push(await sendFinalCheck(config, reminder, month));
+            }
+        }
+
+        return NextResponse.json({ success: true, results, timestamp: now.toISOString() });
+    } catch (error) {
+        console.error('Cron error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+async function sendMonthlyReminder(config, month) {
+    const token = uuidv4();
+    const reminder = await createReminder(month, token);
+
+    const recipients = await getRecipients();
+    const officeManager = recipients.find(r => r.role === 'office_manager');
+
+    if (!officeManager) {
+        await logEvent(reminder.id, 'ERROR', 'No office manager configured');
+        return { action: 'monthly_reminder', status: 'error', reason: 'no office manager' };
+    }
+
+    const subject = (config.email_subject || 'Monthly Bank Status Check - {month}').replace('{month}', month);
+    const bodyText = config.email_body || 'Please review our bank account status.';
+    const senderName = config.sender_name || 'One Hour Heating & Air';
+
+    const html = buildReminderEmailHtml(bodyText, month, token);
+
+    await sendEmail(officeManager.email, subject, html, senderName);
+    await logEvent(reminder.id, 'MONTHLY_REMINDER_SENT', `Sent to: ${officeManager.email}`);
+
+    return { action: 'monthly_reminder', status: 'sent', to: officeManager.email };
+}
+
+async function sendFollowUp(config, reminder, followUpNumber) {
+    const recipients = await getRecipients();
+    const officeManager = recipients.find(r => r.role === 'office_manager');
+    if (!officeManager) return { action: 'follow_up', status: 'error', reason: 'no office manager' };
+
+    const senderName = config.sender_name || 'One Hour Heating & Air';
+    const subject = `[Reminder #${followUpNumber}] Bank Status Response Needed — ${reminder.month}`;
+    const bodyText = `This is follow-up #${followUpNumber}. We haven't received a response to the monthly bank account status check for <strong>${reminder.month}</strong>. Please respond at your earliest convenience.`;
+
+    const html = buildReminderEmailHtml(bodyText, reminder.month, reminder.token, followUpNumber);
+    await sendEmail(officeManager.email, subject, html, senderName);
+    await incrementFollowUp(reminder.id);
+    await logEvent(reminder.id, `FOLLOWUP_${followUpNumber}_SENT`, `Follow-up #${followUpNumber} sent to ${officeManager.email}`);
+
+    return { action: 'follow_up', status: 'sent', number: followUpNumber };
+}
+
+async function sendFinalCheck(config, originalReminder, month) {
+    const token = uuidv4();
+    const finalReminder = await createFinalReminder(month, token, originalReminder.id);
+
+    const recipients = await getRecipients();
+    const officeManager = recipients.find(r => r.role === 'office_manager');
+    if (!officeManager) return { action: 'final_check', status: 'error', reason: 'no office manager' };
+
+    const senderName = config.sender_name || 'One Hour Heating & Air';
+    const priorResponse = originalReminder.response || 'NOT_RESPONDED';
+
+    // Send final check to office manager
+    const subject = `[FINAL CHECK] Please Reconfirm Bank Status — ${month}`;
+    const html = buildFinalCheckEmailHtml(month, priorResponse, token);
+    await sendEmail(officeManager.email, subject, html, senderName);
+
+    // Notify all recipients that final check was sent
+    const allRecipients = recipients.filter(r => r.active);
+    const notifSubject = `[FINAL CHECK SENT] Awaiting Reconfirmation — ${month}`;
+    const notifHtml = buildFinalCheckNotificationHtml(month, priorResponse);
+
+    for (const recipient of allRecipients) {
+        await sendEmail(recipient.email, notifSubject, notifHtml, senderName);
+    }
+
+    await logEvent(finalReminder.id, 'FINAL_CHECK_SENT', `Sent to ${officeManager.email}, notified ${allRecipients.length} recipients`);
+
+    return { action: 'final_check', status: 'sent' };
+}

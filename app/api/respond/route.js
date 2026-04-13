@@ -1,0 +1,71 @@
+import { NextResponse } from 'next/server';
+import {
+    initializeDatabase, getReminderByToken, recordResponse,
+    getRecipients, getConfig, logEvent
+} from '@/lib/db';
+import {
+    sendEmail, buildNotificationSubject, buildNotificationEmailHtml
+} from '@/lib/email';
+
+export async function POST(request) {
+    try {
+        await initializeDatabase();
+        const { token, action, message } = await request.json();
+
+        if (!token || !action) {
+            return NextResponse.json({ error: 'Missing token or action' }, { status: 400 });
+        }
+
+        const reminder = await getReminderByToken(token);
+        if (!reminder) {
+            return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
+        }
+
+        if (reminder.status === 'responded') {
+            return NextResponse.json({ error: 'Already responded', response: reminder.response }, { status: 409 });
+        }
+
+        // Validate-only request (used by response page to check token)
+        if (action === '_validate') {
+            return NextResponse.json({ valid: true, month: reminder.month });
+        }
+
+        const responseType = action.toUpperCase();
+        if (!['YES', 'MAYBE', 'NO'].includes(responseType)) {
+            return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        }
+
+        // Yes and Maybe require a message
+        if ((responseType === 'YES' || responseType === 'MAYBE') && !message?.trim()) {
+            return NextResponse.json({ error: 'A note is required for Yes or Maybe responses' }, { status: 400 });
+        }
+
+        // Record the response
+        await recordResponse(token, responseType, message || '');
+
+        const config = await getConfig();
+        const recipients = await getRecipients();
+        const senderName = config.sender_name || 'One Hour Heating & Air';
+
+        // Notify ALL recipients
+        const subject = buildNotificationSubject(responseType, reminder.month, reminder.is_final);
+        const html = buildNotificationEmailHtml(responseType, reminder.month, message, reminder.is_final);
+
+        for (const recipient of recipients) {
+            try {
+                await sendEmail(recipient.email, subject, html, senderName);
+            } catch (e) {
+                console.error(`Failed to notify ${recipient.email}:`, e);
+            }
+        }
+
+        const label = reminder.is_final ? 'FINAL_CHECK' : 'MONTHLY';
+        await logEvent(reminder.id, `${label}_RESPONSE_${responseType}`, message || '(no notes)');
+        await logEvent(reminder.id, `${label}_NOTIFICATION_SENT`, `Notified ${recipients.length} recipient(s)`);
+
+        return NextResponse.json({ success: true, response: responseType });
+    } catch (error) {
+        console.error('Response error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}

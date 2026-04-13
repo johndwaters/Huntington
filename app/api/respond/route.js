@@ -42,15 +42,19 @@ export async function POST(request) {
         const recipients = await getRecipients();
         const senderName = config.sender_name || 'One Hour Heating & Air';
 
-        // Notify ALL recipients
+        // Notify ALL recipients in a single batch email to avoid SMTP timeouts
         const subject = buildNotificationSubject(responseType, reminder.month, reminder.is_final);
         const html = buildNotificationEmailHtml(responseType, reminder.month, message, reminder.is_final);
 
-        for (const recipient of recipients) {
+        const allEmails = recipients.map(r => r.email);
+
+        if (allEmails.length > 0) {
             try {
-                await sendEmail(recipient.email, subject, html, senderName);
+                await sendEmail(allEmails, subject, html, senderName);
             } catch (e) {
-                console.error(`Failed to notify ${recipient.email}:`, e);
+                console.error(`Failed to notify distro list:`, e);
+                // We'll throw so the UI shows an error instead of failing silently
+                throw new Error('Database updated, but failed to dispatch the email: ' + e.message);
             }
         }
 

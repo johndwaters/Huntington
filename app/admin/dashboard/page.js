@@ -121,6 +121,26 @@ export default function AdminDashboard() {
         }
     };
 
+    const forceDebugEvent = async () => {
+        if (!confirm('Run a raw email connection debug test?')) return;
+        setSaving(true);
+        try {
+            const res = await fetch('/api/respond', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: 'test', action: '_debug_email' })
+            });
+            const data = await res.json();
+            console.log(data);
+            if (res.ok) showAlert('success', 'Email payload successfully transmitted to Google SMTP! Check console for debug info.');
+            else showAlert('error', `Debug failed: ${data.error}`);
+        } catch (err) {
+            showAlert('error', 'Critical test error: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleLogout = async () => {
         await fetch('/api/admin/login', { method: 'DELETE' });
         router.push('/admin');
@@ -148,6 +168,10 @@ export default function AdminDashboard() {
                     <button className="btn btn-sm btn-dark" onClick={sendReminder} disabled={saving}
                         style={{ background: 'var(--brand-yellow)', color: 'var(--brand-black)' }}>
                         {saving ? 'Sending...' : 'Send Reminder Now'}
+                    </button>
+                    <button className="btn btn-sm btn-outline" onClick={forceDebugEvent} disabled={saving}
+                        style={{ borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)' }}>
+                        Send Test Ping
                     </button>
                     <button className="btn btn-sm btn-outline" onClick={handleLogout}
                         style={{ borderColor: '#555', color: '#999' }}>

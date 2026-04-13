@@ -30,6 +30,30 @@ export async function POST(request) {
             return NextResponse.json({ valid: true, month: reminder.month });
         }
 
+        // Debug test endpoint to verify email delivery mechanism
+        if (action === '_debug_email') {
+            const config = await getConfig();
+            const recipients = await getRecipients();
+            const senderName = config.sender_name || 'One Hour Heating & Air';
+
+            const allEmails = recipients.map(r => r.email);
+            if (allEmails.length === 0) {
+                return NextResponse.json({ error: 'No recipients found to test.' }, { status: 400 });
+            }
+
+            try {
+                const info = await sendEmail(
+                    allEmails,
+                    '[DEBUG] Huntington Tracker Test',
+                    `<p>If you see this, the Vercel-to-Gmail connection is working flawlessly to multiple recipients!</p>`,
+                    senderName
+                );
+                return NextResponse.json({ success: true, info });
+            } catch (err) {
+                return NextResponse.json({ error: err.message, stack: err.stack }, { status: 500 });
+            }
+        }
+
         const responseType = action.toUpperCase();
         if (!['YES', 'MAYBE', 'NO'].includes(responseType)) {
             return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

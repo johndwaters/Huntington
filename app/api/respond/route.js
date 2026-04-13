@@ -35,13 +35,8 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
 
-        // Yes and Maybe require a message
-        if ((responseType === 'YES' || responseType === 'MAYBE') && !message?.trim()) {
-            return NextResponse.json({ error: 'A note is required for Yes or Maybe responses' }, { status: 400 });
-        }
-
         // Record the response
-        await recordResponse(token, responseType, message || '');
+        await recordResponse(token, responseType, message || 'No extra notes provided by user.');
 
         const config = await getConfig();
         const recipients = await getRecipients();

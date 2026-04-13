@@ -51,11 +51,7 @@ export default function RespondPage() {
 
     const handleActionSelect = (action) => {
         setSelectedAction(action);
-        if (action === 'no') {
-            submitResponse(action, '');
-        } else {
-            setStage('notes');
-        }
+        submitResponse(action, '');
     };
 
     const submitResponse = async (action, msg) => {
@@ -85,14 +81,7 @@ export default function RespondPage() {
         }
     };
 
-    const handleSubmitNotes = () => {
-        if (!message.trim()) {
-            setErrorMsg('A note is required before submitting.');
-            return;
-        }
-        setErrorMsg('');
-        submitResponse(selectedAction, message.trim());
-    };
+    // The notes form submission is intentionally removed since it's now a 1-click system.
 
     // ── Render stages ──
 
@@ -197,7 +186,7 @@ export default function RespondPage() {
                                 Yes — Need Credit Line Pull
                             </button>
                         </div>
-                        <p className="text-center text-muted">Yes and Maybe will ask for a required note.</p>
+                        <p className="text-center text-muted">Clicking any button will immediately notify the team.</p>
                     </div>
                     <div className="card-footer"><p>ONE HOUR HEATING & AIR</p></div>
                 </div>
@@ -205,47 +194,6 @@ export default function RespondPage() {
         );
     }
 
-    // stage === 'notes'
-    const isMaybe = selectedAction === 'maybe';
-    const headerColor = isMaybe ? 'var(--brand-orange)' : 'var(--brand-red)';
-    const title = isMaybe ? 'Uncertain — May Need Pull' : 'Credit Line Pull Needed';
-    const placeholder = isMaybe
-        ? "e.g. Balance is borderline — we'll know more by the 25th."
-        : "e.g. Amount needed: $5,000. Balance won't cover the $7,000 payment.";
-
-    return (
-        <div className="page-center">
-            <div className="card response-card">
-                <div className="card-header" style={{ background: headerColor }}>
-                    <h2>{title}</h2>
-                    <p>Please provide a note for the team</p>
-                </div>
-                <div className="card-body">
-                    {errorMsg && <div className="alert alert-error">{errorMsg}</div>}
-                    <p style={{ fontSize: 15, color: '#444', lineHeight: 1.6, marginBottom: 20 }}>
-                        Please provide a note for the team before confirming. <strong>This is required.</strong>
-                    </p>
-                    <div className="form-group">
-                        <label>Notes for the team <span className="required-star">*</span></label>
-                        <textarea
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            placeholder={placeholder}
-                            rows="4"
-                            autoFocus
-                        />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                        <button className="btn btn-outline" onClick={() => { setSelectedAction(null); setStage('choose'); setErrorMsg(''); }}>
-                            Back
-                        </button>
-                        <button className="btn btn-block" style={{ background: headerColor, flex: 1 }} onClick={handleSubmitNotes}>
-                            Confirm & Notify Team
-                        </button>
-                    </div>
-                </div>
-                <div className="card-footer"><p>ONE HOUR HEATING & AIR</p></div>
-            </div>
-        </div>
-    );
+    // Fallback
+    return null;
 }

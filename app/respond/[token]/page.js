@@ -72,12 +72,12 @@ export default function RespondPage() {
                     setStage('already');
                 } else {
                     setErrorMsg(data.error || 'Something went wrong');
-                    setStage('notes'); // go back to notes form
+                    setStage('error');
                 }
             }
         } catch (err) {
             setErrorMsg('Unable to connect. Please try again.');
-            setStage('notes');
+            setStage('error');
         }
     };
 

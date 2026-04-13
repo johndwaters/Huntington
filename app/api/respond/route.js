@@ -12,24 +12,6 @@ export async function POST(request) {
         await initializeDatabase();
         const { token, action, message } = await request.json();
 
-        if (!token || !action) {
-            return NextResponse.json({ error: 'Missing token or action' }, { status: 400 });
-        }
-
-        const reminder = await getReminderByToken(token);
-        if (!reminder) {
-            return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
-        }
-
-        if (reminder.status === 'responded') {
-            return NextResponse.json({ error: 'Already responded', response: reminder.response }, { status: 409 });
-        }
-
-        // Validate-only request (used by response page to check token)
-        if (action === '_validate') {
-            return NextResponse.json({ valid: true, month: reminder.month });
-        }
-
         // Debug test endpoint to verify email delivery mechanism
         if (action === '_debug_email') {
             const config = await getConfig();
@@ -52,6 +34,24 @@ export async function POST(request) {
             } catch (err) {
                 return NextResponse.json({ error: err.message, stack: err.stack }, { status: 500 });
             }
+        }
+
+        if (!token || !action) {
+            return NextResponse.json({ error: 'Missing token or action' }, { status: 400 });
+        }
+
+        const reminder = await getReminderByToken(token);
+        if (!reminder) {
+            return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
+        }
+
+        if (reminder.status === 'responded') {
+            return NextResponse.json({ error: 'Already responded', response: reminder.response }, { status: 409 });
+        }
+
+        // Validate-only request (used by response page to check token)
+        if (action === '_validate') {
+            return NextResponse.json({ valid: true, month: reminder.month });
         }
 
         const responseType = action.toUpperCase();

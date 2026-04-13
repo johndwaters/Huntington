@@ -35,12 +35,16 @@ export async function POST(request) {
         const senderName = config.sender_name || 'One Hour Heating & Air';
 
         const html = buildReminderEmailHtml(bodyText, month, token);
-        await sendEmail(officeManager.email, subject, html, senderName);
-        await logEvent(reminder.id, 'MANUAL_REMINDER_SENT', `Sent to: ${officeManager.email} (triggered manually from admin)`);
+
+        // CC everyone who isn't the office manager
+        const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);
+
+        await sendEmail(officeManager.email, subject, html, senderName, ccEmails);
+        await logEvent(reminder.id, 'MANUAL_REMINDER_SENT', `Sent to: ${officeManager.email} and CC'd ${ccEmails.length} others`);
 
         return NextResponse.json({
             success: true,
-            message: `Reminder sent to ${officeManager.email} for ${month}`,
+            message: `Reminder sent to ${officeManager.email} and CC'd ${ccEmails.length} recipients`,
         });
     } catch (error) {
         console.error('Manual trigger error:', error);

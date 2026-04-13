@@ -93,8 +93,9 @@ async function sendMonthlyReminder(config, month) {
 
     const html = buildReminderEmailHtml(bodyText, month, token);
 
-    await sendEmail(officeManager.email, subject, html, senderName);
-    await logEvent(reminder.id, 'MONTHLY_REMINDER_SENT', `Sent to: ${officeManager.email}`);
+    const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);
+    await sendEmail(officeManager.email, subject, html, senderName, ccEmails);
+    await logEvent(reminder.id, 'MONTHLY_REMINDER_SENT', `Sent to: ${officeManager.email} and CC'd ${ccEmails.length} others`);
 
     return { action: 'monthly_reminder', status: 'sent', to: officeManager.email };
 }
@@ -109,9 +110,11 @@ async function sendFollowUp(config, reminder, followUpNumber) {
     const bodyText = `This is follow-up #${followUpNumber}. We haven't received a response to the monthly bank account status check for <strong>${reminder.month}</strong>. Please respond at your earliest convenience.`;
 
     const html = buildReminderEmailHtml(bodyText, reminder.month, reminder.token, followUpNumber);
-    await sendEmail(officeManager.email, subject, html, senderName);
+    const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);
+
+    await sendEmail(officeManager.email, subject, html, senderName, ccEmails);
     await incrementFollowUp(reminder.id);
-    await logEvent(reminder.id, `FOLLOWUP_${followUpNumber}_SENT`, `Follow-up #${followUpNumber} sent to ${officeManager.email}`);
+    await logEvent(reminder.id, `FOLLOWUP_${followUpNumber}_SENT`, `Follow-up #${followUpNumber} sent to ${officeManager.email} and CC'd ${ccEmails.length} others`);
 
     return { action: 'follow_up', status: 'sent', number: followUpNumber };
 }
@@ -127,21 +130,23 @@ async function sendFinalCheck(config, originalReminder, month) {
     const senderName = config.sender_name || 'One Hour Heating & Air';
     const priorResponse = originalReminder.response || 'NOT_RESPONDED';
 
-    // Send final check to office manager
+    // Send final check to office manager and CC everyone else
     const subject = `[FINAL CHECK] Please Reconfirm Bank Status — ${month}`;
     const html = buildFinalCheckEmailHtml(month, priorResponse, token);
-    await sendEmail(officeManager.email, subject, html, senderName);
+    const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);
 
-    // Notify all recipients that final check was sent
-    const allRecipients = recipients.filter(r => r.active);
+    await sendEmail(officeManager.email, subject, html, senderName, ccEmails);
+
+    // Notify all recipients that final check was sent (this could be redundant with CC, but acts as a formal system log)
+    const allEmails = recipients.filter(r => r.active).map(r => r.email);
     const notifSubject = `[FINAL CHECK SENT] Awaiting Reconfirmation — ${month}`;
     const notifHtml = buildFinalCheckNotificationHtml(month, priorResponse);
 
-    for (const recipient of allRecipients) {
-        await sendEmail(recipient.email, notifSubject, notifHtml, senderName);
+    if (allEmails.length > 0) {
+        await sendEmail(allEmails, notifSubject, notifHtml, senderName);
     }
 
-    await logEvent(finalReminder.id, 'FINAL_CHECK_SENT', `Sent to ${officeManager.email}, notified ${allRecipients.length} recipients`);
+    await logEvent(finalReminder.id, 'FINAL_CHECK_SENT', `Sent to ${officeManager.email}, notified ${allEmails.length} recipients`);
 
     return { action: 'final_check', status: 'sent' };
 }

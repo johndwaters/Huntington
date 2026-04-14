@@ -2,21 +2,25 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
+const ACTION_CONFIG = {
+    no:    { color: 'var(--brand-green)',  label: 'Yes — Funds Good',    responseKey: 'NO' },
+    maybe: { color: 'var(--brand-orange)', label: 'Maybe — Uncertain',   responseKey: 'MAYBE' },
+    yes:   { color: 'var(--brand-red)',    label: 'No — Funds are Low',  responseKey: 'YES' },
+};
+
 export default function RespondPage() {
     const params = useParams();
     const searchParams = useSearchParams();
     const token = params.token;
     const preselectedAction = searchParams.get('action');
 
-    const [stage, setStage] = useState('loading'); // loading, choose, notes, submitting, done, error
+    const [stage, setStage] = useState('loading'); // loading, choose, confirm, submitting, done, already, error
     const [selectedAction, setSelectedAction] = useState(null);
-    const [message, setMessage] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
     const [result, setResult] = useState(null);
     const [reminderMonth, setReminderMonth] = useState('');
 
     useEffect(() => {
-        // Validate token
         const validate = async () => {
             try {
                 const res = await fetch(`/api/respond`, {
@@ -35,9 +39,13 @@ export default function RespondPage() {
                     setStage('already');
                     return;
                 }
-                // Token is valid — show action selection or auto-select
-                if (preselectedAction && ['yes', 'maybe', 'no'].includes(preselectedAction)) {
-                    handleActionSelect(preselectedAction);
+                const data = await res.json();
+                if (data.month) setReminderMonth(data.month);
+
+                // Token is valid — show confirmation screen (never auto-submit)
+                if (preselectedAction && ACTION_CONFIG[preselectedAction]) {
+                    setSelectedAction(preselectedAction);
+                    setStage('confirm');
                 } else {
                     setStage('choose');
                 }
@@ -51,16 +59,16 @@ export default function RespondPage() {
 
     const handleActionSelect = (action) => {
         setSelectedAction(action);
-        submitResponse(action, '');
+        setStage('confirm');
     };
 
-    const submitResponse = async (action, msg) => {
+    const handleConfirm = async () => {
         setStage('submitting');
         try {
             const res = await fetch('/api/respond', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, action, message: msg }),
+                body: JSON.stringify({ token, action: selectedAction, message: '' }),
             });
             const data = await res.json();
             if (res.ok) {
@@ -80,8 +88,6 @@ export default function RespondPage() {
             setStage('error');
         }
     };
-
-    // The notes form submission is intentionally removed since it's now a 1-click system.
 
     // ── Render stages ──
 
@@ -139,11 +145,78 @@ export default function RespondPage() {
         );
     }
 
+    if (stage === 'confirm') {
+        const cfg = ACTION_CONFIG[selectedAction] || ACTION_CONFIG.no;
+        return (
+            <div className="page-center">
+                <div className="card response-card">
+                    <div className="card-header" style={{ background: cfg.color }}>
+                        <h2>Confirm Your Response</h2>
+                        {reminderMonth && <p style={{ color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontSize: 14 }}>{reminderMonth}</p>}
+                    </div>
+                    <div className="card-body text-center">
+                        <p style={{ fontSize: 14, color: 'var(--brand-med-gray)', marginBottom: 12 }}>You selected:</p>
+                        <div style={{
+                            display: 'inline-block',
+                            background: cfg.color,
+                            color: 'white',
+                            padding: '10px 28px',
+                            borderRadius: 8,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            marginBottom: 24,
+                        }}>
+                            {cfg.label}
+                        </div>
+                        <p style={{ fontSize: 14, color: 'var(--brand-med-gray)', lineHeight: 1.6, marginBottom: 28 }}>
+                            Once confirmed, your response will be recorded and the entire team will be notified.
+                        </p>
+                        <button
+                            onClick={handleConfirm}
+                            style={{
+                                background: cfg.color,
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: 8,
+                                padding: '14px 36px',
+                                fontSize: 16,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'block',
+                                width: '100%',
+                                marginBottom: 12,
+                            }}
+                        >
+                            Confirm &amp; Submit
+                        </button>
+                        <button
+                            onClick={() => setStage('choose')}
+                            style={{
+                                background: 'transparent',
+                                color: 'var(--brand-med-gray)',
+                                border: '1px solid #ddd',
+                                borderRadius: 8,
+                                padding: '10px 24px',
+                                fontSize: 14,
+                                cursor: 'pointer',
+                                display: 'block',
+                                width: '100%',
+                            }}
+                        >
+                            ← Change my answer
+                        </button>
+                    </div>
+                    <div className="card-footer"><p>ONE HOUR HEATING & AIR</p></div>
+                </div>
+            </div>
+        );
+    }
+
     if (stage === 'done') {
         const configs = {
-            YES: { color: 'var(--brand-red)', bg: '#fdf2f2', label: 'Funds are Low', msg: 'Your response has been recorded and the whole team has been notified that funds are low.' },
-            MAYBE: { color: 'var(--brand-orange)', bg: '#fef9e7', label: 'Uncertain', msg: 'Your response has been recorded and the whole team has been notified that the status is uncertain.' },
-            NO: { color: 'var(--brand-green)', bg: '#eafaf1', label: 'Funds are Good', msg: 'Your response has been recorded and the whole team has been notified that funds are good.' },
+            YES: { color: 'var(--brand-red)',    bg: '#fdf2f2', label: 'Funds are Low',  msg: 'Your response has been recorded and the whole team has been notified that funds are low.' },
+            MAYBE: { color: 'var(--brand-orange)', bg: '#fef9e7', label: 'Uncertain',      msg: 'Your response has been recorded and the whole team has been notified that the status is uncertain.' },
+            NO: { color: 'var(--brand-green)',  bg: '#eafaf1', label: 'Funds are Good', msg: 'Your response has been recorded and the whole team has been notified that funds are good.' },
         };
         const c = configs[result] || configs.NO;
         return (
@@ -169,11 +242,11 @@ export default function RespondPage() {
                 <div className="card response-card">
                     <div className="card-header dark">
                         <h2>Monthly Status Check</h2>
-                        <p>Please select the current status</p>
+                        {reminderMonth && <p style={{ color: 'rgba(255,255,255,0.6)', margin: '4px 0 0', fontSize: 14 }}>{reminderMonth}</p>}
                     </div>
                     <div className="card-body">
                         <p style={{ fontSize: 15, color: 'var(--brand-med-gray)', lineHeight: 1.6, marginBottom: 24 }}>
-                            Your response will be shared with the entire team.
+                            Please select the current status. You will be asked to confirm before your response is sent to the team.
                         </p>
                         <div className="response-buttons">
                             <button className="response-btn" style={{ background: 'var(--brand-green)' }} onClick={() => handleActionSelect('no')}>
@@ -186,7 +259,6 @@ export default function RespondPage() {
                                 No — Funds are Low
                             </button>
                         </div>
-                        <p className="text-center text-muted">Clicking any button will immediately notify the team.</p>
                     </div>
                     <div className="card-footer"><p>ONE HOUR HEATING & AIR</p></div>
                 </div>
@@ -194,6 +266,5 @@ export default function RespondPage() {
         );
     }
 
-    // Fallback
     return null;
 }

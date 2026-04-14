@@ -78,8 +78,23 @@ export default function AdminDashboard() {
         }
     };
 
-    const removeRecipient = async (id) => {
-        if (!confirm('Remove this recipient?')) return;
+    const removeRecipient = async (r) => {
+        if (!confirm('Remove this recipient? They will be saved in Previous Contacts.')) return;
+        try {
+            await fetch('/api/admin/recipients', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...r, active: false }),
+            });
+            fetchData();
+            showAlert('success', 'Recipient removed and saved to Previous Contacts');
+        } catch (err) {
+            showAlert('error', 'Failed to remove recipient');
+        }
+    };
+
+    const permanentlyDeleteRecipient = async (id) => {
+        if (!confirm('Permanently delete this contact? This cannot be undone.')) return;
         try {
             await fetch('/api/admin/recipients', {
                 method: 'DELETE',
@@ -87,9 +102,9 @@ export default function AdminDashboard() {
                 body: JSON.stringify({ id }),
             });
             fetchData();
-            showAlert('success', 'Recipient removed');
+            showAlert('success', 'Contact permanently deleted');
         } catch (err) {
-            showAlert('error', 'Failed to remove recipient');
+            showAlert('error', 'Failed to delete contact');
         }
     };
 
@@ -204,7 +219,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {activeTab === 'settings' && <SettingsTab config={config} setConfig={setConfig} saveConfig={saveConfig} saving={saving} />}
-                {activeTab === 'recipients' && <RecipientsTab recipients={recipients} newRecipient={newRecipient} setNewRecipient={setNewRecipient} addNewRecipient={addNewRecipient} removeRecipient={removeRecipient} toggleRecipient={toggleRecipient} />}
+                {activeTab === 'recipients' && <RecipientsTab recipients={recipients} newRecipient={newRecipient} setNewRecipient={setNewRecipient} addNewRecipient={addNewRecipient} removeRecipient={removeRecipient} toggleRecipient={toggleRecipient} permanentlyDeleteRecipient={permanentlyDeleteRecipient} />}
                 {activeTab === 'history' && <HistoryTab history={history} />}
             </div>
         </div>
@@ -382,8 +397,10 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
     );
 }
 
-function RecipientsTab({ recipients, newRecipient, setNewRecipient, addNewRecipient, removeRecipient, toggleRecipient }) {
+function RecipientsTab({ recipients, newRecipient, setNewRecipient, addNewRecipient, removeRecipient, toggleRecipient, permanentlyDeleteRecipient }) {
     const roleLabels = { office_manager: 'Office Manager', payer: 'Payer', recipient: 'Recipient' };
+    const active = recipients.filter(r => r.active);
+    const previous = recipients.filter(r => !r.active);
 
     return (
         <>
@@ -412,7 +429,7 @@ function RecipientsTab({ recipients, newRecipient, setNewRecipient, addNewRecipi
                 </div>
             </div>
 
-            <div className="card">
+            <div className="card mb-2">
                 <div className="table-wrap">
                     <table>
                         <thead>
@@ -420,25 +437,20 @@ function RecipientsTab({ recipients, newRecipient, setNewRecipient, addNewRecipi
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Role</th>
-                                <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {recipients.length === 0 && (
-                                <tr><td colSpan="5" className="text-center text-muted" style={{ padding: '30px' }}>No recipients added yet</td></tr>
+                            {active.length === 0 && (
+                                <tr><td colSpan="4" className="text-center text-muted" style={{ padding: '30px' }}>No active recipients</td></tr>
                             )}
-                            {recipients.map(r => (
-                                <tr key={r.id} style={{ opacity: r.active ? 1 : 0.5 }}>
+                            {active.map(r => (
+                                <tr key={r.id}>
                                     <td>{r.name || '—'}</td>
                                     <td>{r.email}</td>
                                     <td><span className={`badge ${r.role === 'office_manager' ? 'badge-orange' : r.role === 'payer' ? 'badge-red' : 'badge-gray'}`}>{roleLabels[r.role] || r.role}</span></td>
-                                    <td><span className={`badge ${r.active ? 'badge-green' : 'badge-gray'}`}>{r.active ? 'Active' : 'Inactive'}</span></td>
                                     <td>
-                                        <div className="inline-flex">
-                                            <button className="btn btn-sm btn-outline" onClick={() => toggleRecipient(r)}>{r.active ? 'Disable' : 'Enable'}</button>
-                                            <button className="btn btn-sm btn-outline" onClick={() => removeRecipient(r.id)} style={{ borderColor: 'var(--brand-red)', color: 'var(--brand-red)' }}>Remove</button>
-                                        </div>
+                                        <button className="btn btn-sm btn-outline" onClick={() => removeRecipient(r)} style={{ borderColor: 'var(--brand-red)', color: 'var(--brand-red)' }}>Remove</button>
                                     </td>
                                 </tr>
                             ))}
@@ -446,6 +458,51 @@ function RecipientsTab({ recipients, newRecipient, setNewRecipient, addNewRecipi
                     </table>
                 </div>
             </div>
+
+            {previous.length > 0 && (
+                <div className="card">
+                    <div className="card-body">
+                        <div className="section-title" style={{ marginBottom: 12 }}>
+                            <span>Previous Contacts</span>
+                            <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 8 }}>Click Re-add to restore, or fill form above</span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                            {previous.map(r => (
+                                <div key={r.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    background: '#f8f8f8', border: '1px solid #e8e8e8',
+                                    borderRadius: 8, padding: '8px 14px', fontSize: 13,
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: 600, color: '#333' }}>{r.name || r.email}</div>
+                                        {r.name && <div style={{ color: '#999', fontSize: 12 }}>{r.email}</div>}
+                                        <div style={{ marginTop: 2 }}>
+                                            <span className={`badge ${r.role === 'office_manager' ? 'badge-orange' : r.role === 'payer' ? 'badge-red' : 'badge-gray'}`} style={{ fontSize: 10 }}>
+                                                {roleLabels[r.role] || r.role}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 8 }}>
+                                        <button
+                                            className="btn btn-sm btn-dark"
+                                            onClick={() => toggleRecipient(r)}
+                                            style={{ background: 'var(--brand-yellow)', color: 'var(--brand-black)', fontSize: 12, padding: '4px 12px' }}
+                                        >
+                                            Re-add
+                                        </button>
+                                        <button
+                                            onClick={() => permanentlyDeleteRecipient(r.id)}
+                                            style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: 11, cursor: 'pointer', padding: '2px 0' }}
+                                        >
+                                            Delete forever
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

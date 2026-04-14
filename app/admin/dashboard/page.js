@@ -110,6 +110,17 @@ export default function AdminDashboard() {
         if (!confirm('Send a monthly reminder email now?')) return;
         setSaving(true);
         try {
+            // Always save current settings first so the email uses whatever is in the form
+            const saveRes = await fetch('/api/admin/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config),
+            });
+            if (!saveRes.ok) {
+                showAlert('error', 'Could not save settings before sending. Please try again.');
+                setSaving(false);
+                return;
+            }
             const res = await fetch('/api/admin/trigger', { method: 'POST' });
             const data = await res.json();
             if (res.ok) showAlert('success', data.message);
@@ -222,13 +233,13 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                 </div>
 
                 <div className="form-group">
-                    <label>Email Subject <span className="text-muted">({'{month}'} = auto-filled)</span></label>
+                    <label>Email Subject <span className="text-muted">(available: {'{month}'}, {'{next_month}'}, {'{name}'})</span></label>
                     <input value={config.email_subject || ''} onChange={e => update('email_subject', e.target.value)} />
                 </div>
 
                 <div className="form-group">
-                    <label>Email Body</label>
-                    <textarea value={config.email_body || ''} onChange={e => update('email_body', e.target.value)} rows="3" />
+                    <label>Email Body <span className="text-muted">(available: {'{name}'} = first name, {'{next_month}'} = upcoming month, {'{month}'} = current month)</span></label>
+                    <textarea value={config.email_body || ''} onChange={e => update('email_body', e.target.value)} rows="4" />
                 </div>
 
                 <div className="section-title mt-3"><span>Follow-up Settings</span></div>

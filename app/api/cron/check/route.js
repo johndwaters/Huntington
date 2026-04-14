@@ -87,8 +87,31 @@ async function sendMonthlyReminder(config, month) {
         return { action: 'monthly_reminder', status: 'error', reason: 'no office manager' };
     }
 
-    const subject = (config.email_subject || 'Monthly Bank Status Check - {month}').replace('{month}', month);
-    const bodyText = config.email_body || 'Please review our bank account status.';
+    // Compute next month name for template variables
+    const tz = config.timezone || 'America/New_York';
+    const nowDate = new Date();
+    const nextMonthDate = new Date(nowDate);
+    nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+    const nextMonth = nextMonthDate.toLocaleString('en-US', { month: 'long', timeZone: tz });
+
+    // Resolve recipient first name
+    const recipientFirstName = officeManager.name
+        ? officeManager.name.trim().split(/\s+/)[0]
+        : 'Hi';
+
+    // Replace template variables: {name}, {next_month}, {month}
+    const rawBody = config.email_body || 'Hi {name}, please review our current bank account balance and indicate whether we will need to make a pull on the line of credit for {next_month}\'s Huntington Payment.';
+    const bodyText = rawBody
+        .replace(/{name}/g, recipientFirstName)
+        .replace(/{next_month}/g, nextMonth)
+        .replace(/{month}/g, month);
+
+    const rawSubject = config.email_subject || 'Monthly Bank Status Check - {month}';
+    const subject = rawSubject
+        .replace(/{name}/g, recipientFirstName)
+        .replace(/{next_month}/g, nextMonth)
+        .replace(/{month}/g, month);
+
     const senderName = config.sender_name || 'One Hour Heating & Air';
 
     const html = buildReminderEmailHtml(bodyText, month, token);
@@ -106,8 +129,9 @@ async function sendFollowUp(config, reminder, followUpNumber) {
     if (!officeManager) return { action: 'follow_up', status: 'error', reason: 'no office manager' };
 
     const senderName = config.sender_name || 'One Hour Heating & Air';
+    const firstName = officeManager.name ? officeManager.name.trim().split(/\s+/)[0] : 'Hi';
     const subject = `[Reminder #${followUpNumber}] Bank Status Response Needed — ${reminder.month}`;
-    const bodyText = `This is follow-up #${followUpNumber}. We haven't received a response to the monthly bank account status check for <strong>${reminder.month}</strong>. Please respond at your earliest convenience.`;
+    const bodyText = `Hi ${firstName}, this is follow-up #${followUpNumber}. We haven't received a response to the monthly bank account status check for <strong>${reminder.month}</strong>. Please respond at your earliest convenience.`;
 
     const html = buildReminderEmailHtml(bodyText, reminder.month, reminder.token, followUpNumber);
     const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);

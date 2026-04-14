@@ -36,13 +36,14 @@ export async function GET(request) {
         const month = now.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: tz });
         const dayOfMonth = parseInt(now.toLocaleString('en-US', { day: 'numeric', timeZone: tz }));
 
-        const sendDay = parseInt(config.send_day || '15');
+        const sendDaysBeforeEnd = parseInt(config.send_day || '15');
         const followUpAfterDays = parseInt(config.follow_up_after_days || '3');
         const maxFollowUps = parseInt(config.max_follow_ups || '2');
         const finalCheckDaysBefore = parseInt(config.final_check_days_before || '5');
 
-        // Calculate last day of month
+        // Calculate last day of month and derive the actual send date
         const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const sendDay = lastDay - sendDaysBeforeEnd;  // e.g. 15 days before end of April = Apr 15
         const daysLeft = lastDay - dayOfMonth;
 
         // 1. Check if we need to send monthly reminder

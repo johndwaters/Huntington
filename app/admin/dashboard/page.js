@@ -223,7 +223,8 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
     const year = now.getFullYear();
     const monthIdx = now.getMonth();
     const lastDay = new Date(year, monthIdx + 1, 0).getDate();
-    const sendDay = parseInt(config.send_day || '15');
+    const sendDaysBeforeEnd = parseInt(config.send_day || '15');
+    const sendDay = lastDay - sendDaysBeforeEnd;  // actual calendar date
     const followUpAfter = parseInt(config.follow_up_after_days || '3');
     const maxFollowUps = parseInt(config.max_follow_ups || '2');
     const finalBefore = parseInt(config.final_check_days_before || '5');
@@ -252,7 +253,7 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                         <input value={config.sender_name || ''} onChange={e => update('sender_name', e.target.value)} />
                     </div>
                     <div className="form-group">
-                        <label>Send Day of Month (1–28)</label>
+                        <label>Send Days Before Month End</label>
                         <input type="number" min="1" max="28" value={config.send_day || '15'} onChange={e => update('send_day', e.target.value)} />
                     </div>
                 </div>
@@ -354,7 +355,7 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                                         </option>
                                     ))}
                                 </select>
-                                <span style={{ fontSize: '12px', color: '#aaa' }}>Runs on the {sendDay}{['st','nd','rd'][sendDay-1]||'th'} of each month</span>
+                                <span style={{ fontSize: '12px', color: '#aaa' }}>Sends {sendDaysBeforeEnd} days before month end (the {sendDay}{sendDay === 1 ? 'st' : sendDay === 2 ? 'nd' : sendDay === 3 ? 'rd' : 'th'} this month)</span>
                             </div>
 
                             {/* This month's schedule */}

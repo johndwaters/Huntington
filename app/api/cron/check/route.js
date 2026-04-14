@@ -22,12 +22,26 @@ export async function GET(request) {
     try {
         await initializeDatabase();
         const config = await getConfig();
+
+        // Respect the automation on/off toggle
+        if (config.automation_enabled === 'false') {
+            return NextResponse.json({ success: true, results: [], skipped: 'automation disabled' });
+        }
+
         const now = new Date();
+        const tz = config.timezone || 'America/New_York';
         const results = [];
 
-        // Get current month string
-        const month = now.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: config.timezone || 'America/New_York' });
-        const dayOfMonth = parseInt(now.toLocaleString('en-US', { day: 'numeric', timeZone: config.timezone || 'America/New_York' }));
+        // Get current month string and time components in configured timezone
+        const month = now.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: tz });
+        const dayOfMonth = parseInt(now.toLocaleString('en-US', { day: 'numeric', timeZone: tz }));
+        const hourOfDay = parseInt(now.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz }));
+        const configuredHour = parseInt(config.send_hour || '12');
+
+        // Only act during the configured send hour
+        if (hourOfDay !== configuredHour) {
+            return NextResponse.json({ success: true, results: [], skipped: `not send hour (now=${hourOfDay}, configured=${configuredHour})` });
+        }
 
         const sendDay = parseInt(config.send_day || '15');
         const followUpAfterDays = parseInt(config.follow_up_after_days || '3');
@@ -153,10 +167,24 @@ async function sendFinalCheck(config, originalReminder, month) {
 
     const senderName = config.sender_name || 'One Hour Heating & Air';
     const priorResponse = originalReminder.response || 'NOT_RESPONDED';
+    const tz = config.timezone || 'America/New_York';
+
+    // Resolve recipient first name for personalisation
+    const firstName = officeManager.name ? officeManager.name.trim().split(/\s+/)[0] : 'Hi';
+
+    // Build customised final check body using template variables
+    const rawFinalBody = config.final_check_email_body || null;
+    const finalBodyText = rawFinalBody
+        ? rawFinalBody.replace(/{name}/g, firstName).replace(/{month}/g, month)
+        : null;
+
+    // Build customised final check subject
+    const rawFinalSubject = config.final_check_email_subject || `[FINAL CHECK] Please Reconfirm Bank Status — {month}`;
+    const finalSubject = rawFinalSubject.replace(/{name}/g, firstName).replace(/{month}/g, month);
 
     // Send final check to office manager and CC everyone else
-    const subject = `[FINAL CHECK] Please Reconfirm Bank Status — ${month}`;
-    const html = buildFinalCheckEmailHtml(month, priorResponse, token);
+    const subject = finalSubject;
+    const html = buildFinalCheckEmailHtml(month, priorResponse, token, finalBodyText);
     const ccEmails = recipients.filter(r => r.role !== 'office_manager').map(r => r.email);
 
     await sendEmail(officeManager.email, subject, html, senderName, ccEmails);

@@ -213,13 +213,38 @@ export default function AdminDashboard() {
 
 function SettingsTab({ config, setConfig, saveConfig, saving }) {
     const update = (key, value) => setConfig(prev => ({ ...prev, [key]: value }));
+    const tzLabel = { 'America/New_York': 'ET', 'America/Chicago': 'CT', 'America/Denver': 'MT', 'America/Los_Angeles': 'PT' };
+    const hint = <span className="text-muted" style={{ fontWeight: 'normal', fontSize: '12px' }}>(available: {'{name}'} = first name, {'{next_month}'} = upcoming month, {'{month}'} = current month)</span>;
+
+    // ── Compute this month's schedule for the Automations panel ──
+    const now = new Date();
+    const tz = config.timezone || 'America/New_York';
+    const monthName = now.toLocaleString('en-US', { month: 'long', timeZone: tz });
+    const year = now.getFullYear();
+    const monthIdx = now.getMonth();
+    const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+    const sendDay = parseInt(config.send_day || '15');
+    const followUpAfter = parseInt(config.follow_up_after_days || '3');
+    const maxFollowUps = parseInt(config.max_follow_ups || '2');
+    const finalBefore = parseInt(config.final_check_days_before || '5');
+    const sendHour = parseInt(config.send_hour || '12');
+    const isEnabled = config.automation_enabled !== 'false';
+
+    const scheduleItems = [{ label: 'Initial reminder', day: sendDay }];
+    for (let i = 1; i <= maxFollowUps; i++) {
+        const d = sendDay + followUpAfter * i;
+        if (d <= lastDay) scheduleItems.push({ label: `Follow-up #${i} (if no response)`, day: d });
+    }
+    const finalDay = lastDay - finalBefore;
+    if (finalDay > sendDay) scheduleItems.push({ label: 'Final verification', day: finalDay });
+
+    const hourLabel = h => h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`;
 
     return (
+        <>
         <div className="card">
             <div className="card-body">
-                <div className="section-title">
-                    <span>Email Settings</span>
-                </div>
+                <div className="section-title"><span>Email Settings</span></div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     <div className="form-group">
@@ -233,13 +258,12 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                 </div>
 
                 <div className="form-group">
-                    <label>Email Subject <span className="text-muted">(available: {'{month}'}, {'{next_month}'}, {'{name}'})</span></label>
+                    <label>Email Subject {hint}</label>
                     <input value={config.email_subject || ''} onChange={e => update('email_subject', e.target.value)} />
                 </div>
-
                 <div className="form-group">
-                    <label>Email Body <span className="text-muted">(available: {'{name}'} = first name, {'{next_month}'} = upcoming month, {'{month}'} = current month)</span></label>
-                    <textarea value={config.email_body || ''} onChange={e => update('email_body', e.target.value)} rows="4" />
+                    <label>Email Body {hint}</label>
+                    <textarea value={config.email_body || ''} onChange={e => update('email_body', e.target.value)} rows="3" />
                 </div>
 
                 <div className="section-title mt-3"><span>Follow-up Settings</span></div>
@@ -259,6 +283,16 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                     </div>
                 </div>
 
+                <div className="section-title mt-3"><span>Final Verification Email</span></div>
+                <div className="form-group">
+                    <label>Final Check Subject {hint}</label>
+                    <input value={config.final_check_email_subject || ''} onChange={e => update('final_check_email_subject', e.target.value)} placeholder="Final Check - Please Reconfirm Bank Status — {month}" />
+                </div>
+                <div className="form-group">
+                    <label>Final Check Body {hint}</label>
+                    <textarea value={config.final_check_email_body || ''} onChange={e => update('final_check_email_body', e.target.value)} rows="3" placeholder="Hi {name}, we are 5 days from the end of the month. Please reconfirm the status for {month}." />
+                </div>
+
                 <div className="form-group">
                     <label>Timezone</label>
                     <select value={config.timezone || 'America/New_York'} onChange={e => update('timezone', e.target.value)}>
@@ -274,6 +308,76 @@ function SettingsTab({ config, setConfig, saveConfig, saving }) {
                 </button>
             </div>
         </div>
+
+        {/* ── Automations Panel ── */}
+        <div className="card" style={{ marginTop: '16px' }}>
+            <div className="card-body">
+                <div className="section-title"><span>Automations</span></div>
+                <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#888' }}>
+                    Scheduled automations that run automatically each month. Save settings above to update the schedule preview.
+                </p>
+
+                <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden' }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: isEnabled ? '#fffdf0' : '#fafafa', borderBottom: '1px solid #e8e8e8' }}>
+                        <div>
+                            <div style={{ fontWeight: '600', fontSize: '15px' }}>Huntington Payment Check</div>
+                            <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>Monthly bank status reminder</div>
+                        </div>
+                        {/* Toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '13px', color: isEnabled ? '#333' : '#aaa', fontWeight: '500' }}>
+                                {isEnabled ? 'On' : 'Off'}
+                            </span>
+                            <div
+                                onClick={() => update('automation_enabled', isEnabled ? 'false' : 'true')}
+                                style={{ width: '46px', height: '26px', borderRadius: '13px', cursor: 'pointer', background: isEnabled ? 'var(--brand-yellow, #FFD100)' : '#ccc', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+                            >
+                                <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'white', position: 'absolute', top: '3px', left: isEnabled ? '23px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {isEnabled && (
+                        <div style={{ padding: '16px 20px' }}>
+                            {/* Send time */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                <span style={{ fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>Send time:</span>
+                                <select
+                                    value={config.send_hour || '12'}
+                                    onChange={e => update('send_hour', e.target.value)}
+                                    style={{ fontSize: '13px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                >
+                                    {[6,7,8,9,10,11,12,13,14,15,16,17,18].map(h => (
+                                        <option key={h} value={String(h)}>
+                                            {hourLabel(h)} {tzLabel[tz] || 'ET'}
+                                        </option>
+                                    ))}
+                                </select>
+                                <span style={{ fontSize: '12px', color: '#aaa' }}>Runs on the {sendDay}{['st','nd','rd'][sendDay-1]||'th'} of each month</span>
+                            </div>
+
+                            {/* This month's schedule */}
+                            <div style={{ background: '#f7f7f7', borderRadius: '8px', padding: '14px 16px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
+                                    {monthName} Schedule
+                                </div>
+                                {scheduleItems.map((item, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '5px 0', fontSize: '13px', borderBottom: i < scheduleItems.length - 1 ? '1px solid #ececec' : 'none' }}>
+                                        <span style={{ background: 'var(--brand-yellow, #FFD100)', color: '#111', borderRadius: '5px', padding: '3px 10px', fontWeight: '700', fontSize: '12px', minWidth: '62px', textAlign: 'center', flexShrink: 0 }}>
+                                            {monthName.slice(0, 3)} {item.day}
+                                        </span>
+                                        <span style={{ color: '#444' }}>{item.label}</span>
+                                        <span style={{ color: '#bbb', fontSize: '12px', marginLeft: 'auto' }}>{hourLabel(sendHour)} {tzLabel[tz] || 'ET'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+        </>
     );
 }
 

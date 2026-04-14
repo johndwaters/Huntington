@@ -35,13 +35,6 @@ export async function GET(request) {
         // Get current month string and time components in configured timezone
         const month = now.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: tz });
         const dayOfMonth = parseInt(now.toLocaleString('en-US', { day: 'numeric', timeZone: tz }));
-        const hourOfDay = parseInt(now.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz }));
-        const configuredHour = parseInt(config.send_hour || '12');
-
-        // Only act during the configured send hour
-        if (hourOfDay !== configuredHour) {
-            return NextResponse.json({ success: true, results: [], skipped: `not send hour (now=${hourOfDay}, configured=${configuredHour})` });
-        }
 
         const sendDay = parseInt(config.send_day || '15');
         const followUpAfterDays = parseInt(config.follow_up_after_days || '3');
